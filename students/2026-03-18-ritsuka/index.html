@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ritsuka</title>
+    <!-- 引入外部 CSS 檔案，保持樣式獨立 -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <canvas id="particleCanvas"></canvas>
+    
+    <!-- 發光按鈕與提示文字的容器 -->
+    <div id="ui-container">
+        <button id="colorBtn" class="glow-button">切換顏色</button>
+        <div id="instructions">請移動滑鼠或在螢幕上滑動來互動</div>
+    </div>
+
+    <!-- 將原本 main.js 的內容直接包進 script 標籤中 -->
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const colorBtn = document.getElementById('colorBtn');
+
+        let particlesArray = [];
+        let time = 0;
+        let currentThemeIndex = 0;
+
+        // 定義三種不同的顏色主題 (賽博龐克、烈火金、霓虹綠)
+        const colorThemes = [
+            ['#00f3ff', '#ff00aa', '#9d00ff'], // 預設：青 -> 粉 -> 紫
+            ['#ff4e00', '#ec9f05', '#ff4e00'], // 主題 1：火紅 -> 金黃
+            ['#00ff87', '#60efff', '#0061ff']  // 主題 2：亮綠 -> 天藍
+        ];
+                
+        // 滑鼠與觸控的互動設定
+        let mouse = {
+            x: -1000,
+            y: -1000,
+            radius: 80
+        };
+
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.x;
+            mouse.y = event.y;
+        });
+
+        window.addEventListener('touchmove', (event) => {
+            mouse.x = event.touches[0].clientX;
+            mouse.y = event.touches[0].clientY;
+        });
+
+        window.addEventListener('mouseleave', () => {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+        window.addEventListener('touchend', () => {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+
+        // 切換顏色按鈕事件
+        colorBtn.addEventListener('click', () => {
+            // 切換到下一個主題，如果到底了就回到第一個
+            currentThemeIndex = (currentThemeIndex + 1) % colorThemes.length;
+            
+            // 改變按鈕本身的顏色與發光效果 (透過修改 CSS 變數或直接改樣式)
+            const newPrimaryColor = colorThemes[currentThemeIndex][0];
+            colorBtn.style.color = newPrimaryColor;
+            colorBtn.style.borderColor = newPrimaryColor;
+            
+            // 重新初始化粒子 (這會讓字體重新生成並套用新顏色)
+            init();
+        });
+
+        class Particle {
+            constructor(startX, startY, targetX, targetY, color) {
+                this.x = startX;
+                this.y = startY;
+                this.baseX = targetX;
+                this.baseY = targetY;
+                this.color = color;
+                this.size = Math.random() * 1.5 + 1;
+                this.density = (Math.random() * 30) + 5;
+                this.vx = 0;
+                this.vy = 0;
+                this.friction = 0.85;
+                this.spring = 0.05;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            update() {
+                let rippleX = Math.sin(this.baseY * 0.02 + time) * 4;
+                let rippleY = Math.cos(this.baseX * 0.02 + time) * 4;
+                
+                let targetX = this.baseX + rippleX;
+                let targetY = this.baseY + rippleY;
+
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy) || 0.001;
+
+                if (distance < mouse.radius) {
+                    let forceDirectionX = dx / distance;
+                    let forceDirectionY = dy / distance;
+                    let force = (mouse.radius - distance) / mouse.radius;
+                    let directionX = forceDirectionX * force * this.density;
+                    let directionY = forceDirectionY * force * this.density;
+
+                    this.vx -= directionX;
+                    this.vy -= directionY;
+                }
+
+                let springDx = targetX - this.x;
+                let springDy = targetY - this.y;
+                this.vx += springDx * this.spring;
+                this.vy += springDy * this.spring;
+
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+        }
+
+        function init() {
+            let w = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 800;
+            let h = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight || 600;
+            
+            canvas.width = w;
+            canvas.height = h;
+
+            if (canvas.width === 0 || canvas.height === 0) return;
+
+            particlesArray = [];
+
+            let fontSize = Math.min(canvas.width / 5, 180);
+            ctx.font = `900 ${fontSize}px "Arial Black", "Segoe UI Black", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 根據目前的 currentThemeIndex 取得對應的顏色陣列
+            const currentColors = colorThemes[currentThemeIndex];
+            const gradient = ctx.createLinearGradient(
+                canvas.width / 2 - fontSize * 2, 0, 
+                canvas.width / 2 + fontSize * 2, 0
+            );
+            gradient.addColorStop(0, currentColors[0]);
+            gradient.addColorStop(0.5, currentColors[1]);
+            gradient.addColorStop(1, currentColors[2]);
+
+            ctx.fillStyle = gradient;
+            ctx.fillText('Ritsuka', canvas.width / 2, canvas.height / 2);
+
+            const textData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let step = canvas.width < 768 ? 3 : 5;
+
+            for (let y = 0; y < textData.height; y += step) {
+                for (let x = 0; x < textData.width; x += step) {
+                    const index = (y * textData.width + x) * 4;
+                    const alpha = textData.data[index + 3];
+
+                    if (alpha > 128) {
+                        const r = textData.data[index];
+                        const g = textData.data[index + 1];
+                        const b = textData.data[index + 2];
+                        const color = `rgb(${r}, ${g}, ${b})`;
+
+                        let startX = Math.random() * canvas.width;
+                        let startY = Math.random() * canvas.height;
+
+                        particlesArray.push(new Particle(startX, startY, x, y, color));
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.25)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            time += 0.01;
+
+            for (let i = 0; i < particlesArray.length; i++) {
+                particlesArray[i].update();
+                particlesArray[i].draw();
+            }
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            clearTimeout(window.resizeTimer);
+            window.resizeTimer = setTimeout(() => {
+                init();
+            }, 200);
+        });
+
+        window.onload = function () {
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(() => {
+                    init();
+                    animate();
+                });
+            } else {
+                setTimeout(() => {
+                    init();
+                    animate();
+                }, 200);
+            }
+        };
+    </script>
+</body>
+</html>
